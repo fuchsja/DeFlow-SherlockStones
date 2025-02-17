@@ -4,7 +4,7 @@ from configs import config
 
 from models.deflow import DeFlowNet
 from models.raft import RAFT
-from libs.dataloader import get_dataloaders
+from libs.dataloader import get_dataloaders, get_full_dataloader
 from libs.trainer import Trainer
 from libs.losses import SceneFlow_Loss
 from toolbox.utils import setup_seed
@@ -29,7 +29,11 @@ def instantiate_config(cfg: dict):
         instances['device'] = torch.device('cpu')
         
     ## dataloader
-    instances['dataloader'] = get_dataloaders(cfg)
+    if cfg.misc.mode == "train":
+        instances['dataloader'] = get_dataloaders(cfg)
+    else: # Evaluation mode
+        cfg.augmentation.enabled = False  # Disable augmentation - images should not be cropped
+        instances["dataloader"] = get_full_dataloader(cfg) # Load all images for evaluation
         
     ## model, optimizer, scheduler
     if cfg.network.model == 'deflow':
@@ -59,7 +63,10 @@ def main(cfg_path:str):
     setup_seed(cfg.misc.seed)
     
     trainer = Trainer(cfg, instances)
-    trainer.run()
+    if cfg.misc.mode == "train":
+        trainer.run()
+    if cfg.misc.mode == "eval":
+        trainer.evaluate_fully_trained_model('/cluster/home/fuchsja/bsc/DeFlow/checkpoints/best_model/model_best.pth')
     
     
 
