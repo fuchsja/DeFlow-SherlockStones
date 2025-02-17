@@ -36,7 +36,8 @@ def get_full_dataloader(config):
     dataset = Full_DeFlow_Dataset(config)
     dataloader = torch.utils.data.DataLoader(dataset,
                                         batch_size=config.val.batch_size, 
-                                        num_workers=config.val.num_workers)
+                                        num_workers=config.val.num_workers,
+                                        shuffle = False)
     
     return dataloader
 
