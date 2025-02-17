@@ -13,6 +13,7 @@ import wandb
 from omegaconf import OmegaConf
 from toolbox.utils import partial_load
 import flow_vis
+from PIL import Image
 
 class Trainer(object):
     def __init__(self, args, instances) -> None:
@@ -35,8 +36,11 @@ class Trainer(object):
         self.iter_size = args.train.iter_size
         
         self.loader = dict()
-        self.loader['train'] = instances['dataloader'][0]
-        self.loader['val'] = instances['dataloader'][1]
+        if self.args.misc.mode == "train":
+            self.loader['train'] = instances['dataloader'][0]
+            self.loader['val'] = instances['dataloader'][1]
+        else:
+            self.loader["all"] = instances["dataloader"]
         
         self.loss = instances['loss']
         self.best_loss = 99999
@@ -104,23 +108,66 @@ class Trainer(object):
         else: 
             raise ValueError(f"=> no checkpoint found at '{ckpt_path}'")
     
-    def update_tensorboard_vis(self, phase, output, input):
-        assert phase in ['train', 'val']
-        if phase == 'val': return
-        # flow_vis = tensor_flow2rgb(output['flow_f'][0][0])
-        flow_color = flow_vis.flow_to_color(output['flow_f'][0][0].permute(1,2,0).detach().cpu().numpy())
-        flow_color = np.transpose(flow_color, (2,0,1))
-        self.writer.add_image(f'{phase}/flow_image', flow_color, global_step=self.global_step)
-        self.writer.add_image(f'{phase}/raw_image1', input['imgT_1'][0]/2+0.5, global_step=self.global_step)
-        self.writer.add_image(f'{phase}/raw_image2', input['imgT_2'][0]/2+0.5, global_step=self.global_step)
+    ### ORIGINAL VERSION
+
+    # def update_tensorboard_vis(self, phase, output, input):
+    #     assert phase in ['train', 'val']
+    #     #if phase == 'val': return
+    #     if phase not in ['train', 'val']: return
+
+    #     # flow_vis = tensor_flow2rgb(output['flow_f'][0][0])
+    #     flow_color = flow_vis.flow_to_color(output['flow_f'][0][0].permute(1,2,0).detach().cpu().numpy())
+    #     flow_color = np.transpose(flow_color, (2,0,1))
+    #     self.writer.add_image(f'{phase}/flow_image', flow_color, global_step=self.global_step)
+    #     self.writer.add_image(f'{phase}/raw_image1', input['imgT_1'][0]/2+0.5, global_step=self.global_step)
+    #     self.writer.add_image(f'{phase}/raw_image2', input['imgT_2'][0]/2+0.5, global_step=self.global_step)
         
     
-        if self.loss.compute_depth == True:
-            self.writer.add_image(f'{phase}/depth_image', output['depth_t1'][0][0], global_step=self.global_step)
-            self.writer.add_image(f'{phase}/static_mask', output['static_mask'][0], global_step=self.global_step)
-            # self.writer.add_image(f'{phase}/input_depth', input['input_depth_t1'][0], global_step=self.global_step)
-            # self.writer.add_scalar(f'{phase}/depth_loss', stats['depth_loss'], global_step=self.global_step)
+    #     if self.loss.compute_depth == True:
+    #         self.writer.add_image(f'{phase}/depth_image', output['depth_t1'][0][0], global_step=self.global_step)
+    #         self.writer.add_image(f'{phase}/static_mask', output['static_mask'][0], global_step=self.global_step)
+    #         # self.writer.add_image(f'{phase}/input_depth', input['input_depth_t1'][0], global_step=self.global_step)
+    #         # self.writer.add_scalar(f'{phase}/depth_loss', stats['depth_loss'], global_step=self.global_step)
                 
+
+    ### CHAT-GPT VERSION
+    def update_tensorboard_vis(self, phase, output, input):
+        assert phase in ['train', 'val']
+
+        # Define directory to save images
+        save_dir = '/cluster/scratch/fuchsja/bsc/data/output_images/'
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
+        # Loop through the batch and save images
+        for i in range(input['imgT_1'].size(0)):
+            raw_img1 = input['imgT_1'][i].detach().cpu().numpy().transpose(1, 2, 0)
+            raw_img2 = input['imgT_2'][i].detach().cpu().numpy().transpose(1, 2, 0)
+            flow_img = flow_vis.flow_to_color(output['flow_f'][i][0].permute(1, 2, 0).detach().cpu().numpy())
+
+            # Convert numpy arrays to PIL images and save
+            
+            Image.fromarray((raw_img1 * 255).astype('uint8')).save(os.path.join(save_dir, f'raw_img1_{self.global_step}_{i}.png'))
+            Image.fromarray((raw_img2 * 255).astype('uint8')).save(os.path.join(save_dir, f'raw_img2_{self.global_step}_{i}.png'))
+            Image.fromarray(flow_img.astype('uint8')).save(os.path.join(save_dir, f'flow_img_{self.global_step}_{i}.png'))
+            print("Saved two raw images and an optical flow")
+
+        if self.loss.compute_depth:
+
+            # Save depth and static mask images after ensuring correct shape and scaling
+            depth_img = np.squeeze(output['depth_t1'][0][0].detach().cpu().numpy())
+            static_mask = np.squeeze(output['static_mask'][0].detach().cpu().numpy())
+
+            # Scale to [0, 255] and convert to uint8
+            depth_img_uint8 = (depth_img * 255).astype('uint8')
+            static_mask_uint8 = (static_mask * 255).astype('uint8')
+
+            # Save the images
+            Image.fromarray(depth_img_uint8).save(os.path.join(save_dir, f'depth_image_{self.global_step}.png'))
+            Image.fromarray(static_mask_uint8).save(os.path.join(save_dir, f'static_mask_{self.global_step}.png'))
+            print("Saved depth map and static mask")
+
+    
     def update_tensorborad_stats(self, phase, stats):
         assert phase in ['train', 'val']
         
@@ -204,23 +251,44 @@ class Trainer(object):
             torch.cuda.empty_cache()
             ################################
             # update to the wandb/tensorboard/logger of training stats
-            if (c_iter + 1) % self.verbose_freq == 0:
-                curr_iter = num_iter * (epoch - 1) + c_iter
-                total_loss = loss_dict['total_loss']
-                flow_loss = loss_dict['flow_loss']
-                if self.loss.compute_depth == True:
-                    depth_loss = loss_dict['depth_total_loss']
-                else: 
-                    depth_loss = 0.0
+
+            ############# ORIGINAL VERSION
+            # if (c_iter + 1) % self.verbose_freq == 0:
+            #     curr_iter = num_iter * (epoch - 1) + c_iter
+            #     total_loss = loss_dict['total_loss']
+            #     flow_loss = loss_dict['flow_loss']
+            #     if self.loss.compute_depth == True:
+            #         depth_loss = loss_dict['depth_total_loss']
+            #     else: 
+            #         depth_loss = 0.0
                 
-                if phase == 'train':
-                    logging.info(f'epoch:{epoch}, steps:{self.global_step}, total_loss:{total_loss:2.2f}, flow_loss:{flow_loss:2.2f}, depth_loss:{depth_loss:2.2f}')
-                # elif phase == 'val':
-                #     logging.info(f'Evaluation num:{self.eval_counter}, total_loss:{total_loss:2.2f}, flow_loss:{flow_loss:2.2f}, depth_loss:{depth_loss:2.2f}')
-                # update tensorboard
-                self.update_tensorboard_vis(phase, output_dict, inputs)
-                self.update_tensorborad_stats(phase, loss_dict)
+            #     if phase == 'train':
+            #         logging.info(f'epoch:{epoch}, steps:{self.global_step}, total_loss:{total_loss:2.2f}, flow_loss:{flow_loss:2.2f}, depth_loss:{depth_loss:2.2f}')
+            #     # elif phase == 'val':
+            #     #     logging.info(f'Evaluation num:{self.eval_counter}, total_loss:{total_loss:2.2f}, flow_loss:{flow_loss:2.2f}, depth_loss:{depth_loss:2.2f}')
+            #     # update tensorboard
+            #     self.update_tensorboard_vis(phase, output_dict, inputs)
+            #     self.update_tensorborad_stats(phase, loss_dict)
                 
+
+            #### MY VERSION
+            curr_iter = num_iter * (epoch - 1) + c_iter
+            total_loss = loss_dict['total_loss']
+            flow_loss = loss_dict['flow_loss']
+            if self.loss.compute_depth == True:
+                depth_loss = loss_dict['depth_total_loss']
+            else: 
+                depth_loss = 0.0
+                
+            if phase == 'train':
+                logging.info(f'epoch:{epoch}, steps:{self.global_step}, total_loss:{total_loss:2.2f}, flow_loss:{flow_loss:2.2f}, depth_loss:{depth_loss:2.2f}')
+            elif phase == 'val':
+                logging.info(f'Evaluation num:{self.eval_counter}, total_loss:{total_loss:2.2f}, flow_loss:{flow_loss:2.2f}, depth_loss:{depth_loss:2.2f}')
+            # update tensorboard
+            self.update_tensorboard_vis(phase, output_dict, inputs)
+            self.update_tensorborad_stats(phase, loss_dict)
+                
+
         # epoch_loss = torch.as_tensor(epoch_loss).mean()
         epoch_metrics = self.compute_epoch_metrics(epoch_loss)
         if phase == 'val':
@@ -234,6 +302,11 @@ class Trainer(object):
         self._dump_config()
         logging.info(f'#parameters {sum([x.nelement() for x in self.model.parameters()])/1000000.} M')
         logging.info('Start training')
+
+        # remove these two lines to go back to the original
+        checkpoint_path = '/cluster/home/fuchsja/bsc/DeFlow/checkpoints/best_model/model_best.pth'
+        self._load_checkpoint(checkpoint_path)
+
         for epoch in range(self.start_epoch, self.max_epoch):
             
             if epoch >= self.args.train.epoch_depth:
@@ -262,3 +335,54 @@ class Trainer(object):
             epoch_metrics[key] = np.asarray(curr_losses, dtype=np.float32).mean()
         return epoch_metrics
     
+
+    def evaluate_fully_trained_model(self, checkpoint_path):
+        """Evaluate the model after loading from a checkpoint path."""
+        # Load the checkpoint
+        logging.info(f"Loading model from checkpoint: {checkpoint_path}")
+        self._load_checkpoint(checkpoint_path)
+        
+        # Set the model to evaluation mode
+        self.model.eval()
+
+        # Set up the validation loader
+        val_loader = self.loader['all']
+        
+        # Initialize loss accumulator
+        total_loss = 0
+        num_batches = len(val_loader)
+
+        print(f"In total there are: {num_batches} batches")
+
+        # Iterate through validation dataset
+        with torch.no_grad():
+            for i, inputs in enumerate(val_loader):
+                # Forward pass
+                for key, value in inputs.items():
+                    if(not isinstance(value, list)):
+                        inputs[key] = value.to(self.device)
+
+                output_dict = self.model(inputs)
+                loss_dict = self.loss(inputs, output_dict)
+                
+                # Accumulate total loss
+                total_loss += loss_dict['total_loss']
+                flow_loss = loss_dict['flow_loss']
+                if self.loss.compute_depth == True:
+                    depth_loss = loss_dict['depth_total_loss']
+                
+                # Update TensorBoard visualization after each batch
+                self.update_tensorboard_vis('val', output_dict, inputs)
+                self.global_step += 1
+                #print(f"Images in step:{i} saved successfully. Yay!")
+                # Optional: Log the loss every 10 batches (for example)
+                if i % 10 == 0:
+                    logging.info(f'steps:{i}, total_loss:{total_loss:2.2f}, flow_loss:{flow_loss:2.2f}, depth_loss:{depth_loss:2.2f}')
+
+            # Compute the average loss over the entire validation set
+            logging.info(f"Validation completed.")
+
+            # Return the final evaluation metrics (e.g., average loss)
+            return 1
+
+    # ... [Your existing code]
