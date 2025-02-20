@@ -184,7 +184,7 @@ class Trainer(object):
             Image.fromarray((raw_img2 * 255).astype('uint8')).save(os.path.join(subfolders['raw_img2'], f'raw_img2_{self.global_step}_{i}.png'))
             Image.fromarray(flow_img.astype('uint8')).save(os.path.join(subfolders['optical_flow'], f'flow_img_{self.global_step}_{i}.png'))
     
-            save_velocity_matrices(output['flow_f'], self.global_step, i)
+            self.save_velocity_matrices(output['flow_f'], self.global_step, i)
     
             print("Saved raw images, optical flow, and velocity matrices")
     
