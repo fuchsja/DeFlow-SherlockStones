@@ -304,8 +304,8 @@ class Trainer(object):
         logging.info('Start training')
 
         # remove these two lines to go back to the original
-        checkpoint_path = '/cluster/home/fuchsja/bsc/DeFlow/checkpoints/best_model/model_best.pth'
-        self._load_checkpoint(checkpoint_path)
+        #checkpoint_path = '/cluster/home/fuchsja/bsc/DeFlow/checkpoints/best_model/model_best.pth'
+        #self._load_checkpoint(checkpoint_path)
 
         for epoch in range(self.start_epoch, self.max_epoch):
             
