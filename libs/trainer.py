@@ -130,42 +130,76 @@ class Trainer(object):
     #         # self.writer.add_scalar(f'{phase}/depth_loss', stats['depth_loss'], global_step=self.global_step)
                 
 
-    ### CHAT-GPT VERSION
-    def update_tensorboard_vis(self, phase, output, input):
-        assert phase in ['train', 'val']
+def save_velocity_matrices(flow, step, batch_idx, base_dir='results/'):
+    """
+    Saves the velocity matrices (u, v, magnitude) in separate subfolders.
 
-        # Define directory to save images
-        save_dir = '/cluster/scratch/fuchsja/bsc/data/output_images/'
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
+    Parameters:
+    - flow: Optical flow tensor of shape (B, 2, H, W)
+    - step: Global step in training
+    - batch_idx: Batch index
+    - base_dir: Base directory to save velocity matrices
+    """
+    velocity_dir = os.path.join(base_dir, 'velocities')
+    subfolders = {
+        'u': os.path.join(velocity_dir, 'u'),
+        'v': os.path.join(velocity_dir, 'v'),
+        'magnitude': os.path.join(velocity_dir, 'magnitude')
+    }
 
-        # Loop through the batch and save images
-        for i in range(input['imgT_1'].size(0)):
-            raw_img1 = input['imgT_1'][i].detach().cpu().numpy().transpose(1, 2, 0)
-            raw_img2 = input['imgT_2'][i].detach().cpu().numpy().transpose(1, 2, 0)
-            flow_img = flow_vis.flow_to_color(output['flow_f'][i][0].permute(1, 2, 0).detach().cpu().numpy())
+    for folder in subfolders.values():
+        os.makedirs(folder, exist_ok=True)
 
-            # Convert numpy arrays to PIL images and save
-            
-            Image.fromarray((raw_img1 * 255).astype('uint8')).save(os.path.join(save_dir, f'raw_img1_{self.global_step}_{i}.png'))
-            Image.fromarray((raw_img2 * 255).astype('uint8')).save(os.path.join(save_dir, f'raw_img2_{self.global_step}_{i}.png'))
-            Image.fromarray(flow_img.astype('uint8')).save(os.path.join(save_dir, f'flow_img_{self.global_step}_{i}.png'))
-            print("Saved two raw images and an optical flow")
+    flow_np = flow.detach().cpu().numpy()
+    u, v = flow_np[:, 0, :, :], flow_np[:, 1, :, :]
+    velocity_magnitude = np.sqrt(u**2 + v**2)
 
-        if self.loss.compute_depth:
+    np.save(os.path.join(subfolders['u'], f"u_{step}_{batch_idx}.npy"), u)
+    np.save(os.path.join(subfolders['v'], f"v_{step}_{batch_idx}.npy"), v)
+    np.save(os.path.join(subfolders['magnitude'], f"velocity_mag_{step}_{batch_idx}.npy"), velocity_magnitude)
 
-            # Save depth and static mask images after ensuring correct shape and scaling
-            depth_img = np.squeeze(output['depth_t1'][0][0].detach().cpu().numpy())
-            static_mask = np.squeeze(output['static_mask'][0].detach().cpu().numpy())
+    print(f"Saved velocity matrices for step {step}, batch {batch_idx}")
 
-            # Scale to [0, 255] and convert to uint8
-            depth_img_uint8 = (depth_img * 255).astype('uint8')
-            static_mask_uint8 = (static_mask * 255).astype('uint8')
+def update_tensorboard_vis(self, phase, output, input):
+    assert phase in ['train', 'val']
 
-            # Save the images
-            Image.fromarray(depth_img_uint8).save(os.path.join(save_dir, f'depth_image_{self.global_step}.png'))
-            Image.fromarray(static_mask_uint8).save(os.path.join(save_dir, f'static_mask_{self.global_step}.png'))
-            print("Saved depth map and static mask")
+    base_dir = 'results/'
+    subfolders = {
+        'raw_img1': os.path.join(base_dir, 'raw_images/imgT_1'),
+        'raw_img2': os.path.join(base_dir, 'raw_images/imgT_2'),
+        'optical_flow': os.path.join(base_dir, 'optical_flow'),
+        'depth_maps': os.path.join(base_dir, 'depth_maps'),
+        'static_masks': os.path.join(base_dir, 'static_masks')
+    }
+
+    for folder in subfolders.values():
+        os.makedirs(folder, exist_ok=True)
+
+    for i in range(input['imgT_1'].size(0)):
+        raw_img1 = input['imgT_1'][i].detach().cpu().numpy().transpose(1, 2, 0)
+        raw_img2 = input['imgT_2'][i].detach().cpu().numpy().transpose(1, 2, 0)
+        flow_img = flow_vis.flow_to_color(output['flow_f'][i][0].permute(1, 2, 0).detach().cpu().numpy())
+
+        Image.fromarray((raw_img1 * 255).astype('uint8')).save(os.path.join(subfolders['raw_img1'], f'raw_img1_{self.global_step}_{i}.png'))
+        Image.fromarray((raw_img2 * 255).astype('uint8')).save(os.path.join(subfolders['raw_img2'], f'raw_img2_{self.global_step}_{i}.png'))
+        Image.fromarray(flow_img.astype('uint8')).save(os.path.join(subfolders['optical_flow'], f'flow_img_{self.global_step}_{i}.png'))
+
+        save_velocity_matrices(output['flow_f'], self.global_step, i)
+
+        print("Saved raw images, optical flow, and velocity matrices")
+
+    if self.loss.compute_depth:
+        depth_img = np.squeeze(output['depth_t1'][0][0].detach().cpu().numpy())
+        static_mask = np.squeeze(output['static_mask'][0].detach().cpu().numpy())
+
+        depth_img_uint8 = (depth_img * 255).astype('uint8')
+        static_mask_uint8 = (static_mask * 255).astype('uint8')
+
+        Image.fromarray(depth_img_uint8).save(os.path.join(subfolders['depth_maps'], f'depth_image_{self.global_step}.png'))
+        Image.fromarray(static_mask_uint8).save(os.path.join(subfolders['static_masks'], f'static_mask_{self.global_step}.png'))
+        
+        print("Saved depth map and static mask")
+
 
     
     def update_tensorborad_stats(self, phase, stats):
