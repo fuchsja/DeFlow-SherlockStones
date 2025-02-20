@@ -140,6 +140,8 @@ class Trainer(object):
         - batch_idx: Batch index
         - base_dir: Base directory to save velocity matrices
         """
+        base_dir = 'results/'
+
         subfolders = {
             'u': os.path.join(base_dir, 'u'),
             'v': os.path.join(base_dir, 'v'),
