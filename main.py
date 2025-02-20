@@ -61,13 +61,13 @@ def main(cfg_path:str):
     instances = instantiate_config(cfg)
 
     setup_seed(cfg.misc.seed)
-    std::cout << "Setting up trainer!" << std::endl;
+    print("Setting up trainer!")
     trainer = Trainer(cfg, instances)
-    std::cout << "Trainer ready to go" << std::endl;
+    print("Trainer ready to go")
     if cfg.misc.mode == "train":
         trainer.run()
     if cfg.misc.mode == "eval":
-        std::cout << "Starting evaluation of the model" << std::endl;
+        print("Starting evaluation of the model")
         trainer.evaluate_fully_trained_model('checkpoint/checkpoint.pth')
     
     
