@@ -16,7 +16,7 @@ dataset:
 misc:
   use_gpu: true
   seed: 1124
-  mode: train
+  mode: eval
   ckpt_path: checkpoints/
 optimizer:
   learning_rate: 0.0004
