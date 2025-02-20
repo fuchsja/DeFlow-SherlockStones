@@ -29,8 +29,12 @@ Existing work on scene flow estimation focuses on autonomous driving and mobile 
 ## Installation :national_park:
 First clone our repository:
 ```bash
-git clone https://github.com/Zhu-Liyuan/DeFlow
+git clone https://github.com/fuchsja/DeFlow-SherlockStones.git
 cd DeFlow
+```
+Then add a folder for results:
+```bash
+mkdir results
 ```
 
 You will need to install conda to build the environment.
@@ -41,10 +45,13 @@ pip install -r requirements.txt
 ```
 
 ## Dataset and pretrained model
-We provide preprocessed debris flow dataset. The preprocessed dataset and checkpoint can be downloaded by running:
+We provide preprocessed debris flow dataset. The preprocessed dataset can be downloaded by running:
 ```shell
 wget --no-check-certificate --show-progress https://share.phys.ethz.ch/~gsg/DeFlow/DeFlow_Dataset.zip
 unzip DeFlow_Dataset.zip -d data
+```
+There is also the possiblity to download a pretrained version of the model here:
+```shell
 wget --no-check-certificate --show-progress https://share.phys.ethz.ch/~gsg/DeFlow/checkpoint.zip
 unzip checkpoint.zip
 ```
