@@ -66,7 +66,7 @@ def main(cfg_path:str):
     if cfg.misc.mode == "train":
         trainer.run()
     if cfg.misc.mode == "eval":
-        trainer.evaluate_fully_trained_model('/cluster/home/fuchsja/bsc/DeFlow/checkpoints/best_model/model_best.pth')
+        trainer.evaluate_fully_trained_model('checkpoint/checkpoint.pth')
     
     
 
